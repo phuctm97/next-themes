@@ -26,12 +26,13 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = props => {
   return <Theme {...props} />
 }
 
-const defaultThemes = ['light', 'dark'];
+const defaultThemes = ['light', 'dark']
 
 const Theme: React.FC<ThemeProviderProps> = ({
   forcedTheme,
   disableTransitionOnChange = false,
   enableSystem = true,
+  enableMultipleSystemThemes = false,
   enableColorScheme = true,
   storageKey = 'theme',
   themes = defaultThemes,
@@ -42,16 +43,24 @@ const Theme: React.FC<ThemeProviderProps> = ({
   nonce
 }) => {
   const [theme, setThemeState] = useState(() => getTheme(storageKey, defaultTheme))
-  const [resolvedTheme, setResolvedTheme] = useState(() => getTheme(storageKey))
-  const attrs = !value ? themes : Object.values(value)
+  const [resolvedTheme, setResolvedTheme] = useState(() =>
+    getResolvedTheme(storageKey, defaultTheme, enableMultipleSystemThemes)
+  )
+
+  const defaultColorScheme = useMemo(() => getColorScheme(defaultTheme), [defaultTheme])
+  const attrs = value ? Object.values(value) : themes
 
   const applyTheme = useCallback(theme => {
     let resolved = theme
     if (!resolved) return
 
     // If theme is system, resolve it before setting theme
-    if (theme === 'system' && enableSystem) {
-      resolved = getSystemTheme()
+    if (enableSystem) {
+      if (theme === 'system') {
+        resolved = getSystemTheme()
+      } else if (enableMultipleSystemThemes && theme.startsWith('system-')) {
+        resolved = `${getSystemTheme()}${theme.substring(6)}`
+      }
     }
 
     const name = value ? value[resolved] : resolved
@@ -60,7 +69,6 @@ const Theme: React.FC<ThemeProviderProps> = ({
 
     if (attribute === 'class') {
       d.classList.remove(...attrs)
-
       if (name) d.classList.add(name)
     } else {
       if (name) {
@@ -71,36 +79,39 @@ const Theme: React.FC<ThemeProviderProps> = ({
     }
 
     if (enableColorScheme) {
-      const fallback = colorSchemes.includes(defaultTheme) ? defaultTheme : null
-      const colorScheme = colorSchemes.includes(resolved) ? resolved : fallback
       // @ts-ignore
-      d.style.colorScheme = colorScheme
+      d.style.colorScheme = getColorScheme(resolved, defaultColorScheme)
     }
 
     enable?.()
   }, [])
 
-  const setTheme = useCallback(
-    theme => {
-      setThemeState(theme)
+  const setTheme = useCallback(theme => {
+    setThemeState(theme)
 
-      // Save to storage
-      try {
-        localStorage.setItem(storageKey, theme)
-      } catch (e) {
-        // Unsupported
-      }
-    },
-    [forcedTheme]
-  )
+    // Save to storage
+    try {
+      localStorage.setItem(storageKey, theme)
+    } catch (e) {
+      // Unsupported
+    }
+  }, [])
 
   const handleMediaQuery = useCallback(
     (e: MediaQueryListEvent | MediaQueryList) => {
-      const resolved = getSystemTheme(e)
-      setResolvedTheme(resolved)
+      const systemTheme = getSystemTheme(e)
+      const resolvedTheme =
+        enableMultipleSystemThemes && theme?.startsWith('system-')
+          ? `${getSystemTheme()}${theme.substring(6)}`
+          : systemTheme
+      setResolvedTheme(resolvedTheme)
 
-      if (theme === 'system' && enableSystem && !forcedTheme) {
-        applyTheme('system')
+      if (
+        !forcedTheme &&
+        enableSystem &&
+        (theme === 'system' || (enableMultipleSystemThemes && theme?.startsWith('system-')))
+      ) {
+        applyTheme(theme)
       }
     },
     [theme, forcedTheme]
@@ -138,24 +149,63 @@ const Theme: React.FC<ThemeProviderProps> = ({
     applyTheme(forcedTheme ?? theme)
   }, [forcedTheme, theme])
 
-  const providerValue = useMemo(() => ({
-    theme,
-    setTheme,
-    forcedTheme,
-    resolvedTheme: theme === 'system' ? resolvedTheme : theme,
-    themes: enableSystem ? [...themes, 'system'] : themes,
-    systemTheme: (enableSystem ? resolvedTheme : undefined) as 'light' | 'dark' | undefined
-  }), [theme, setTheme, forcedTheme, resolvedTheme, enableSystem, themes]);
+  const providerThemes = useMemo(() => {
+    if (!enableSystem) return themes
+
+    const themeSet = new Set(themes)
+    themeSet.add('system')
+
+    if (enableMultipleSystemThemes) {
+      const maybeSystemThemes: Record<string, { light?: boolean; dark?: boolean }> = {}
+      for (const theme of themes) {
+        let key: string | undefined
+        if (theme === 'light' || theme === 'dark') key = ''
+        if (theme.startsWith('light-') || theme.startsWith('dark-'))
+          key = theme.substring(theme.indexOf('-'))
+        if (typeof key !== 'string') continue
+
+        let val = maybeSystemThemes[key]
+        if (!val) {
+          val = {}
+          maybeSystemThemes[key] = val
+        }
+        if (theme === 'light' || theme.startsWith('light-')) val.light = true
+        if (theme === 'dark' || theme.startsWith('dark-')) val.dark = true
+      }
+      const systemThemes = Object.entries(maybeSystemThemes)
+        .filter(([_, v]) => v.light && v.dark)
+        .map(([k]) => k)
+      for (const systemTheme of systemThemes) {
+        themeSet.add(`system${systemTheme}`)
+      }
+    }
+
+    return Array.from(themeSet)
+  }, [themes, enableSystem, enableMultipleSystemThemes])
+
+  const providerValue = useMemo(
+    () => ({
+      theme,
+      setTheme,
+      forcedTheme,
+      resolvedTheme:
+        theme === 'system' || (enableMultipleSystemThemes && theme?.startsWith('system-'))
+          ? resolvedTheme
+          : theme,
+      systemTheme: (enableSystem ? resolvedTheme : undefined) as 'light' | 'dark' | undefined,
+      themes: providerThemes
+    }),
+    [theme, setTheme, forcedTheme, resolvedTheme, enableSystem, providerThemes]
+  )
 
   return (
-    <ThemeContext.Provider
-      value={providerValue}
-    >
+    <ThemeContext.Provider value={providerValue}>
       <ThemeScript
         {...{
           forcedTheme,
           disableTransitionOnChange,
           enableSystem,
+          enableMultipleSystemThemes,
           enableColorScheme,
           storageKey,
           themes,
@@ -278,6 +328,21 @@ const getTheme = (key: string, fallback?: string) => {
     // Unsupported
   }
   return theme || fallback
+}
+
+const getResolvedTheme = (key: string, fallback?: string, enableMultipleSystemThemes?: boolean) => {
+  const theme = getTheme(key, fallback)
+  if (!theme) return undefined
+  if (theme === 'system') return getSystemTheme()
+  if (enableMultipleSystemThemes && theme.startsWith('system-'))
+    return `${getSystemTheme()}${theme.substring(6)}`
+  return theme
+}
+
+const getColorScheme = (theme: string, fallback: 'light' | 'dark' | null = null) => {
+  if (theme === 'light' || theme.startsWith('light-')) return 'light'
+  if (theme === 'dark' || theme.startsWith('dark-')) return 'dark'
+  return colorSchemes.includes(theme) ? theme : fallback
 }
 
 const disableAnimation = () => {

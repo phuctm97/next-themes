@@ -102,7 +102,8 @@ All your theme configuration is passed to ThemeProvider.
 - `storageKey = 'theme'`: Key used to store theme setting in localStorage
 - `defaultTheme = 'system'`: Default theme name (for v0.0.12 and lower the default was `light`). If `enableSystem` is false, the default theme is `light`
 - `forcedTheme`: Forced theme name for the current page (does not modify saved theme settings)
-- `enableSystem = true`: Whether to switch between `dark` and `light` based on `prefers-color-scheme`
+- `enableSystem = true`: Whether to switch between `light` and `dark` themes based on `prefers-color-scheme`
+- `enableMultipleSystemThemes = false`: Whether to switch between `light-*` and `dark-*` themes in `themes` based on `prefers-color-scheme`
 - `enableColorScheme = true`: Whether to indicate to browsers which color scheme is used (dark or light) for built-in UI like inputs and buttons
 - `disableTransitionOnChange = false`: Optionally disable all CSS transitions when switching themes ([example](#disable-transitions-on-theme-change))
 - `themes = ['light', 'dark']`: List of theme names
@@ -229,11 +230,39 @@ next-themes is designed to support any number of themes! Simply pass a list of t
 <ThemeProvider themes={['pink', 'red', 'blue']}>
 ```
 
-> **Note!** When you pass `themes`, the default set of themes ("light" and "dark") are overridden. Make sure you include those if you still want your light and dark themes:
+> **Note**: When you pass `themes`, the default set of themes ("light" and "dark") are overridden. Make sure you include those if you still want your light and dark themes:
+>
+> ```js
+> <ThemeProvider themes={['pink', 'red', 'blue', 'light', 'dark']}>
+> ```
+
+**Automatic light/dark mode for multiple themes**
+
+When multiple themes other than `light` and `dark` are provided in `themes`, next-themes supports automatic light/dark mode for themes with matching prefix `light-` and `dark-`.
+
+To use this feature, set `enableMultipleSystemThemes = true` and pass in a list of themes. Themes with matching `light-{name}` and `dark-{name}` will have auto-generated `system-{name}` themes, the rest will work as system-agnostic themes.
+
+Use `useTheme()` instead of hard-coded values to render theme select/switch in your application. `themes` returned from `useTheme()` contain all available themes, including these `system-{name}` themes.
+
+When `setTheme()` with a `system-{name}` theme, next-themes will automatically switch between `light-{name}` and `dark-{name}` based on `prefers-color-scheme`.
 
 ```js
-<ThemeProvider themes={['pink', 'red', 'blue', 'light', 'dark']}>
+<ThemeProvider
+  themes={[
+    'light-pink',
+    'dark-pink',
+    'light-red',
+    'dark-red',
+    'light-blue',
+    'dark-blue',
+    'light',
+    'dark'
+  ]}
+  enableMultipleSystemThemes
+/>
 ```
+
+> **Note**: If `themes` contain "light" and "dark" themes, there will be an auto-generated "system" theme and the same rule applies.
 
 ### Without CSS variables
 

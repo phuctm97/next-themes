@@ -22,8 +22,10 @@ export interface ThemeProviderProps {
   themes?: string[]
   /** Forced theme name for the current page */
   forcedTheme?: string
-  /** Whether to switch between dark and light themes based on prefers-color-scheme */
+  /** Whether to switch between light and dark themes based on prefers-color-scheme */
   enableSystem?: boolean
+  /** Whether to switch between `light-*` and `dark-*` themes in `themes` based on prefers-color-scheme */
+  enableMultipleSystemThemes?: boolean
   /** Disable all CSS transitions when switching themes */
   disableTransitionOnChange?: boolean
   /** Whether to indicate to browsers which color scheme is used (dark or light) for built-in UI like inputs and buttons */
